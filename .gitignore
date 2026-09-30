@@ -1,0 +1,33 @@
+# Environment files with real values
+.env
+.env.local
+*.env
+!.env.example
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+.eslintcache
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Enunciado de la prueba: se conserva localmente, no forma parte del entregable
+Prueba Técnica Desarrollador Full Stack Mid-Level.pdf
+
+# Test output
+TestResults/
+coverage/
+*.trx
