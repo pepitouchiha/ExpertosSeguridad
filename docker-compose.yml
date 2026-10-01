@@ -27,8 +27,11 @@ services:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ConnectionStrings__Default: "Host=database;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
       Database__ApplyMigrationsOnStartup: "true"
-      Database__SeedSampleData: ${SEED_SAMPLE_DATA:-true}
       Cors__AllowedOrigins: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      # The API refuses to start without a signing key, so a missing .env fails loudly
+      # instead of issuing tokens nobody can validate.
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Jwt__LifetimeMinutes: ${JWT_LIFETIME_MINUTES:-480}
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:

@@ -1,14 +1,20 @@
 using ExpertosSeguridad.Application.Abstractions;
+using ExpertosSeguridad.Application.Exceptions;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace ExpertosSeguridad.Infrastructure.Persistence;
 
 /// <summary>
-/// One commit per use case. The aggregate and its new history entry are tracked by the same
-/// context, so a single SaveChanges writes both inside one database transaction: if the
-/// history insert fails, the status or assignment change is rolled back with it.
+/// Una confirmación por caso de uso. El agregado y su nueva entrada de historial los sigue el
+/// mismo contexto, así que un único SaveChanges escribe ambos dentro de una transacción: si falla
+/// la inserción del historial, el cambio de estado o de asignación se revierte con ella.
 /// </summary>
 public sealed class UnitOfWork : IUnitOfWork
 {
+    /// <summary>Código de error de PostgreSQL para una violación de restricción única.</summary>
+    private const string UniqueViolation = "23505";
+
     private readonly MaintenanceDbContext _context;
 
     public UnitOfWork(MaintenanceDbContext context)
@@ -16,6 +22,18 @@ public sealed class UnitOfWork : IUnitOfWork
         _context = context;
     }
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
-        _context.SaveChangesAsync(cancellationToken);
+    public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is PostgresException { SqlState: UniqueViolation })
+        {
+            // Una regla de unicidad que el caso de uso ya verifica igual puede perder una carrera.
+            // Traducirla aquí mantiene la capa de aplicación libre de tipos de EF y Npgsql, y el cliente
+            // recibe un 409 en lugar de un 500.
+            throw new ConflictException("Ya existe un registro con esos datos.");
+        }
+    }
 }

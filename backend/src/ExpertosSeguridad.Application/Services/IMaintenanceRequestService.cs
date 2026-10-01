@@ -19,6 +19,11 @@ public interface IMaintenanceRequestService
         ChangeStatusCommand command,
         CancellationToken cancellationToken = default);
 
+    Task<MaintenanceRequestDetailDto> ResolveAsync(
+        Guid id,
+        ResolveRequestCommand command,
+        CancellationToken cancellationToken = default);
+
     Task<MaintenanceRequestDetailDto> AssignResponsibleAsync(
         Guid id,
         AssignResponsibleCommand command,

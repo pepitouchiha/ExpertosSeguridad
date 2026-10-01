@@ -1,8 +1,8 @@
 namespace ExpertosSeguridad.Domain.Exceptions;
 
 /// <summary>
-/// Raised when an invariant of the model is violated (mandatory field, length, range).
-/// Maps to HTTP 400.
+/// Se lanza cuando se viola una invariante del modelo (campo obligatorio, longitud, rango).
+/// Corresponde a HTTP 400.
 /// </summary>
 public sealed class DomainValidationException : DomainException
 {

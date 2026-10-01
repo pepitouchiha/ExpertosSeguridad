@@ -3,9 +3,9 @@ using ExpertosSeguridad.Domain.Enums;
 namespace ExpertosSeguridad.Domain.Policies;
 
 /// <summary>
-/// Single source of truth for the request lifecycle. Keeping the transition table here
-/// (instead of inside a controller or service) means the rule is testable without any
-/// infrastructure and can be queried by the API so the UI never has to restate it.
+/// Única fuente de verdad del ciclo de vida de la solicitud. Tener aquí la tabla de transiciones
+/// (y no dentro de un controlador o un servicio) permite probar la regla sin infraestructura y
+/// que la API la consulte, para que la interfaz nunca tenga que repetirla.
 /// </summary>
 public static class RequestStatusTransitionPolicy
 {
@@ -18,6 +18,16 @@ public static class RequestStatusTransitionPolicy
             [RequestStatus.Resolved] = Array.Empty<RequestStatus>(),
             [RequestStatus.Cancelled] = Array.Empty<RequestStatus>()
         };
+
+    /// <summary>
+    /// Solicitudes en las que alguien está trabajando: iniciadas y sin cerrar. Las pendientes no
+    /// están (nadie las tiene aún), ni las terminales (el trabajo ya acabó).
+    /// </summary>
+    public static readonly IReadOnlyList<RequestStatus> UnderAttention = new[]
+    {
+        RequestStatus.InProgress,
+        RequestStatus.OnHold
+    };
 
     public static IReadOnlyList<RequestStatus> AllowedFrom(RequestStatus current) =>
         AllowedTransitions.TryGetValue(current, out var allowed) ? allowed : Array.Empty<RequestStatus>();

@@ -1,4 +1,3 @@
-using ExpertosSeguridad.Application.Abstractions;
 using ExpertosSeguridad.Application.Contracts;
 using ExpertosSeguridad.Domain.Entities;
 using FluentValidation;
@@ -6,13 +5,13 @@ using FluentValidation;
 namespace ExpertosSeguridad.Application.Validation;
 
 /// <summary>
-/// Validates the incoming contract before it reaches the aggregate, so the API can answer
-/// with a per-field 400 instead of a single exception message. Bounds are read from the
-/// domain constants: the rule keeps one owner and the validator only surfaces it earlier.
+/// Valida el contrato de entrada antes de que llegue al agregado, para que la API pueda responder
+/// un 400 por campo en lugar de un único mensaje de excepción. Los límites se leen de las
+/// constantes del dominio: la regla tiene un solo dueño y el validador solo la adelanta.
 /// </summary>
 public sealed class CreateMaintenanceRequestCommandValidator : AbstractValidator<CreateMaintenanceRequestCommand>
 {
-    public CreateMaintenanceRequestCommandValidator(IUserDirectory userDirectory)
+    public CreateMaintenanceRequestCommandValidator()
     {
         RuleFor(command => command.Title)
             .NotEmpty().WithMessage("El título es obligatorio.")
@@ -31,9 +30,5 @@ public sealed class CreateMaintenanceRequestCommandValidator : AbstractValidator
 
         RuleFor(command => command.Priority)
             .IsInEnum().WithMessage("La prioridad indicada no es válida.");
-
-        RuleFor(command => command.RequesterId)
-            .Must(id => userDirectory.Find(id) is not null)
-            .WithMessage("El solicitante indicado no existe en el catálogo de usuarios.");
     }
 }

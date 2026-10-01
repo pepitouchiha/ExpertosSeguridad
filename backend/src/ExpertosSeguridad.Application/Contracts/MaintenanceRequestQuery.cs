@@ -9,7 +9,7 @@ public enum SortDirection
 }
 
 /// <summary>
-/// Server-side filtering, searching, sorting and paging parameters for the request list.
+/// Parámetros de filtrado, búsqueda, orden y paginación del listado, aplicados en el servidor.
 /// </summary>
 public sealed record MaintenanceRequestQuery
 {
@@ -31,8 +31,23 @@ public sealed record MaintenanceRequestQuery
     public SortDirection SortByCreatedAt { get; init; } = SortDirection.Desc;
 
     /// <summary>
-    /// Clamps user-supplied paging values so a hostile or careless caller cannot ask for
-    /// an unbounded page.
+    /// Restringe el resultado a las filas de un solicitante. Nunca se enlaza desde la query string:
+    /// el caso de uso lo fija a partir del usuario autenticado, así que un solicitante no puede
+    /// ampliar su alcance editando la URL.
+    /// </summary>
+    public Guid? RequesterId { get; init; }
+
+    /// <summary>
+    /// Pone primero todas las solicitudes asignadas a este usuario —las que siguen en curso antes que
+    /// las cerradas— por delante del orden por fecha elegido. Igual que <see cref="RequesterId"/>,
+    /// nunca se enlaza desde la query string: el caso de uso lo fija para el personal a partir del
+    /// usuario autenticado.
+    /// </summary>
+    public Guid? PrioritiseResponsibleId { get; init; }
+
+    /// <summary>
+    /// Acota los valores de paginación que envía el usuario, para que alguien malintencionado o
+    /// descuidado no pueda pedir una página sin límite.
     /// </summary>
     public MaintenanceRequestQuery Normalise() => this with
     {

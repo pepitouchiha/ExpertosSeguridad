@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { useActor } from '@/components/actor/ActorProvider';
+import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { ErrorMessage, Spinner } from '@/components/ui/Feedback';
 import { ApiError, maintenanceRequestsApi } from '@/lib/api/client';
@@ -20,13 +20,12 @@ interface FormState {
   description: string;
   category: RequestCategory;
   priority: RequestPriority;
-  requesterId: string;
 }
 
 /**
- * Client-side validation mirrors the API bounds to give immediate feedback, but it is only a
- * convenience: the server validates again and its field errors are surfaced here, so the
- * backend stays the authority.
+ * La validación en el cliente replica los límites de la API para dar respuesta inmediata, pero
+ * es solo una comodidad: el servidor vuelve a validar y sus errores por campo se muestran aquí,
+ * así que el backend sigue siendo la autoridad.
  */
 function validate(form: FormState): Record<string, string> {
   const errors: Record<string, string> = {};
@@ -41,23 +40,18 @@ function validate(form: FormState): Record<string, string> {
     errors.description = `La descripción debe tener entre ${DESCRIPTION_MIN} y ${DESCRIPTION_MAX} caracteres.`;
   }
 
-  if (!form.requesterId) {
-    errors.requesterId = 'Seleccione el solicitante.';
-  }
-
   return errors;
 }
 
 export function CreateRequestForm() {
   const router = useRouter();
-  const { actor, users } = useActor();
+  const { user, accessToken } = useAuth();
 
   const [form, setForm] = useState<FormState>({
     title: '',
     description: '',
     category: 'Infrastructure',
     priority: 'Medium',
-    requesterId: actor?.id ?? '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -78,15 +72,15 @@ export function CreateRequestForm() {
 
     setIsSubmitting(true);
     try {
+      // No se envía solicitante: la API registra al usuario autenticado como solicitante.
       const created = await maintenanceRequestsApi.create(
         {
           title: form.title.trim(),
           description: form.description.trim(),
           category: form.category,
           priority: form.priority,
-          requesterId: form.requesterId,
         },
-        actor.id,
+        accessToken,
       );
 
       router.push(`/requests/${created.id}`);
@@ -194,23 +188,12 @@ export function CreateRequestForm() {
         </div>
 
         <div>
-          <label className="field-label" htmlFor="requesterId">
-            Solicitante
-          </label>
-          <select
-            id="requesterId"
-            className="field-control"
-            value={form.requesterId}
-            onChange={(event) => update('requesterId', event.target.value)}
-            aria-invalid={Boolean(errors.requesterId)}
-          >
-            {users.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name}
-              </option>
-            ))}
-          </select>
-          {errors.requesterId ? <p className="field-error">{errors.requesterId}</p> : null}
+          <span className="field-label">Solicitante</span>
+          {/* Se muestra, no se elige: el backend toma el solicitante de la sesión, así que el campo es
+              informativo y no se puede apuntar a otra persona. */}
+          <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            {user.name}
+          </p>
         </div>
       </div>
 

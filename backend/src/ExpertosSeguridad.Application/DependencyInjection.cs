@@ -9,13 +9,18 @@ namespace ExpertosSeguridad.Application;
 public static class DependencyInjection
 {
     /// <summary>
-    /// Registers the use cases owned by this layer. Each layer exposes its own composition
-    /// entry point so the host only wires modules, not individual classes.
+    /// Registra los casos de uso de esta capa. Cada capa expone su propio punto de composición para
+    /// que el host solo conecte módulos, no clases individuales.
     /// </summary>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddScoped<IMaintenanceRequestService, MaintenanceRequestService>();
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IUserAdministrationService, UserAdministrationService>();
         services.AddScoped<IValidator<CreateMaintenanceRequestCommand>, CreateMaintenanceRequestCommandValidator>();
+        services.AddScoped<IValidator<LoginCommand>, LoginCommandValidator>();
+        services.AddScoped<IValidator<ResolveRequestCommand>, ResolveRequestCommandValidator>();
+        services.AddScoped<IValidator<RegisterCommand>, RegisterCommandValidator>();
 
         return services;
     }

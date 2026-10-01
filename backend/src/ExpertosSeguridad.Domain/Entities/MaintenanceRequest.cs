@@ -6,9 +6,9 @@ using ExpertosSeguridad.Domain.ValueObjects;
 namespace ExpertosSeguridad.Domain.Entities;
 
 /// <summary>
-/// Aggregate root of the maintenance request lifecycle. Every state mutation goes through
-/// a behaviour method that validates the rule and appends the matching history entry, so
-/// the invariants hold regardless of which caller (API, test, future job) drives the model.
+/// Raíz de agregado del ciclo de vida de la solicitud. Toda mutación de estado pasa por un método
+/// de comportamiento que valida la regla y agrega la entrada de historial correspondiente, así que
+/// las invariantes se cumplen sin importar quién maneje el modelo (API, prueba, un proceso futuro).
 /// </summary>
 public sealed class MaintenanceRequest
 {
@@ -27,6 +27,13 @@ public sealed class MaintenanceRequest
     }
 
     public Guid Id { get; private set; }
+
+    /// <summary>
+    /// Número secuencial legible ("SOL-0007"), asignado por la base de datos al insertar. El Guid sigue
+    /// siendo la identidad en el código y en las URLs; esto existe solo para que las personas puedan
+    /// referirse a una solicitud. Vale 0 hasta que la solicitud se guarda.
+    /// </summary>
+    public int Number { get; private set; }
 
     public string Title { get; private set; }
 
@@ -50,14 +57,24 @@ public sealed class MaintenanceRequest
 
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    /// <summary>La respuesta del responsable al solicitante. Existe una vez resuelta la solicitud.</summary>
+    public Resolution? Resolution { get; private set; }
+
     public IReadOnlyCollection<RequestHistoryEntry> History => _history.AsReadOnly();
 
-    public IReadOnlyList<RequestStatus> AllowedNextStatuses => RequestStatusTransitionPolicy.AllowedFrom(Status);
+    /// <summary>
+    /// Las transiciones que esta solicitud puede tomar ahora: las de la tabla, menos las que necesitan
+    /// un responsable cuando no lo hay. Por eso una solicitud pendiente solo ofrece cancelar: la forma
+    /// de iniciarla es asignarla.
+    /// </summary>
+    public IReadOnlyList<RequestStatus> AllowedNextStatuses => RequestStatusTransitionPolicy.AllowedFrom(Status)
+        .Where(target => ResponsibleId.HasValue || !RequestAccessPolicy.IsReservedForResponsible(target))
+        .ToList();
 
     /// <summary>
-    /// Factory enforcing the creation invariants. The initial status is always
-    /// <see cref="RequestStatus.Pending"/> and the timestamp comes from the caller
-    /// (the API supplies the server clock), never from the HTTP payload.
+    /// Fábrica que hace cumplir las invariantes de creación. El estado inicial es siempre
+    /// <see cref="RequestStatus.Pending"/> y la fecha la entrega quien llama (la API usa el reloj
+    /// del servidor), nunca el cuerpo HTTP.
     /// </summary>
     public static MaintenanceRequest Create(
         string title,
@@ -92,10 +109,47 @@ public sealed class MaintenanceRequest
     }
 
     /// <summary>
-    /// Applies a lifecycle transition. Rejects anything the policy does not contemplate,
-    /// including a no-op change to the current status.
+    /// Aplica una transición del ciclo de vida pedida por <paramref name="actor"/>. Las
+    /// verificaciones van de la más general a la más específica, lo que además fija la respuesta HTTP:
+    /// <list type="number">
+    /// <item>la transición debe existir en la tabla; si no, 409 para cualquiera;</item>
+    /// <item>las transiciones de ejecución necesitan responsable; si no, 409: la solicitud no está lista;</item>
+    /// <item>y solo ese responsable puede tomarlas; si no, 403.</item>
+    /// </list>
+    /// Verificar al actor dentro del agregado, y no solo en el servicio, garantiza que nadie pueda
+    /// registrar «resuelta por» alguien que no estaba haciendo el trabajo.
     /// </summary>
     public void ChangeStatus(RequestStatus newStatus, Actor actor, DateTimeOffset occurredAt)
+    {
+        EnsureCanMoveTo(newStatus, actor);
+
+        // Resolver no es un simple cambio de estado: cierra la solicitud con una respuesta al
+        // solicitante, así que tiene su propia operación, que no se puede invocar sin respuesta.
+        if (newStatus == RequestStatus.Resolved)
+        {
+            throw new DomainValidationException(
+                nameof(Resolution),
+                "Para resolver la solicitud registre la respuesta para el solicitante.");
+        }
+
+        ApplyStatus(newStatus, actor, occurredAt);
+    }
+
+    /// <summary>
+    /// Cierra la solicitud con la respuesta del responsable. Las mismas verificaciones que cualquier
+    /// transición de ejecución (debe estar en progreso, tener responsable y resolverla él), y la
+    /// respuesta y el cambio de estado se aplican juntos: no puede existir una solicitud resuelta
+    /// sin respuesta, ni una respuesta sobre una solicitud que no se resolvió.
+    /// </summary>
+    public void Resolve(string title, string description, Actor actor, DateTimeOffset occurredAt)
+    {
+        EnsureCanMoveTo(RequestStatus.Resolved, actor);
+
+        Resolution = Resolution.Create(title, description, actor, occurredAt);
+        ApplyStatus(RequestStatus.Resolved, actor, occurredAt);
+    }
+
+    private void EnsureCanMoveTo(RequestStatus newStatus, Actor actor)
     {
         EnsureDefinedEnum(newStatus, nameof(newStatus));
 
@@ -104,18 +158,39 @@ public sealed class MaintenanceRequest
             throw new InvalidStatusTransitionException(Status, newStatus);
         }
 
-        var previousStatus = Status;
-        Status = newStatus;
-        UpdatedAt = occurredAt;
+        if (RequestAccessPolicy.IsReservedForResponsible(newStatus))
+        {
+            if (!ResponsibleId.HasValue)
+            {
+                throw new InvalidStatusTransitionException(
+                    Status,
+                    newStatus,
+                    "La solicitud no tiene responsable. Asígnela para iniciar su atención.");
+            }
 
-        _history.Add(RequestHistoryEntry.ForStatusChange(Id, previousStatus, newStatus, actor, occurredAt));
+            if (ResponsibleId != actor.Id)
+            {
+                throw new ForbiddenOperationException(
+                    $"Solo el responsable asignado ({ResponsibleName}) puede poner en espera, reanudar o resolver esta solicitud.");
+            }
+        }
     }
 
     /// <summary>
-    /// Assigns or replaces the responsible. Passing <c>null</c> clears the assignment.
+    /// Asigna o reemplaza al responsable. Asignar una solicitud pendiente también la inicia: con
+    /// alguien a cargo ya no hay nada que esperar, así que pasa a
+    /// <see cref="RequestStatus.InProgress"/> en la misma operación, y el historial registra ambos
+    /// eventos, la asignación y el cambio de estado que provocó, con el mismo actor e instante. Las
+    /// dos entradas se guardan en la misma confirmación, o ninguna.
+    ///
+    /// El responsable se puede reemplazar, pero nunca quitar. Dejar sin responsable una solicitud
+    /// iniciada implicaría volver a <see cref="RequestStatus.Pending"/>, una transición que la tabla
+    /// del ciclo de vida no contempla; y una solicitud pendiente nunca tiene responsable que quitar.
     /// </summary>
-    public void AssignResponsible(Actor? responsible, Actor actor, DateTimeOffset occurredAt)
+    public void AssignResponsible(Actor responsible, Actor actor, DateTimeOffset occurredAt)
     {
+        ArgumentNullException.ThrowIfNull(responsible);
+
         if (RequestStatusTransitionPolicy.IsTerminal(Status))
         {
             throw new DomainValidationException(
@@ -123,7 +198,7 @@ public sealed class MaintenanceRequest
                 $"No se puede modificar el responsable de una solicitud en estado '{Status}'.");
         }
 
-        if (ResponsibleId == responsible?.Id)
+        if (ResponsibleId == responsible.Id)
         {
             throw new DomainValidationException(
                 nameof(ResponsibleId),
@@ -134,11 +209,27 @@ public sealed class MaintenanceRequest
             ? new Actor(ResponsibleId.Value, ResponsibleName!)
             : null;
 
-        ResponsibleId = responsible?.Id;
-        ResponsibleName = responsible?.Name;
+        ResponsibleId = responsible.Id;
+        ResponsibleName = responsible.Name;
         UpdatedAt = occurredAt;
 
         _history.Add(RequestHistoryEntry.ForResponsibleChange(Id, previous, responsible, actor, occurredAt));
+
+        // La tabla permite Pending → InProgress, así que es una transición normal y no un atajo
+        // alrededor de la política; solo es automática en lugar de pedida.
+        if (Status == RequestStatus.Pending)
+        {
+            ApplyStatus(RequestStatus.InProgress, actor, occurredAt);
+        }
+    }
+
+    private void ApplyStatus(RequestStatus newStatus, Actor actor, DateTimeOffset occurredAt)
+    {
+        var previousStatus = Status;
+        Status = newStatus;
+        UpdatedAt = occurredAt;
+
+        _history.Add(RequestHistoryEntry.ForStatusChange(Id, previousStatus, newStatus, actor, occurredAt));
     }
 
     private static string NormaliseTitle(string title)

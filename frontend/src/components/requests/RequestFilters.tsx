@@ -8,9 +8,9 @@ import { REQUEST_CATEGORIES, REQUEST_PRIORITIES, REQUEST_STATUSES } from '@/lib/
 import { categoryLabels, priorityLabels, statusLabels } from '@/lib/labels';
 
 /**
- * Filters live in the URL, not in component state: the server page reads them and asks the
- * API for exactly that page of data, so filtering and sorting really happen in the backend
- * and every view is shareable and reloadable.
+ * Los filtros viven en la URL, no en el estado del componente: la página del servidor los lee
+ * y le pide a la API exactamente esa página de datos, así que el filtrado y el orden ocurren de
+ * verdad en el backend y cada vista se puede compartir y recargar.
  */
 export function RequestFilters() {
   const router = useRouter();
@@ -18,9 +18,9 @@ export function RequestFilters() {
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
-  // The URL is the single source of truth for the criteria. The search box is uncontrolled
-  // and keyed by the active term, so navigating (or clearing the filters) resets it without
-  // mirroring the URL into component state.
+  // La URL es la única fuente de verdad de los criterios. La caja de búsqueda no es controlada y
+  // usa como clave el término activo, así que navegar (o limpiar los filtros) la reinicia sin
+  // copiar la URL al estado del componente.
   const activeSearch = searchParams.get('search') ?? '';
 
   const applyParam = (key: string, value: string) => {
@@ -32,7 +32,7 @@ export function RequestFilters() {
       params.delete(key);
     }
 
-    // Any change to the criteria invalidates the current page number.
+    // Cualquier cambio en los criterios invalida el número de página actual.
     params.delete('page');
 
     startTransition(() => router.push(`${pathname}?${params.toString()}`));

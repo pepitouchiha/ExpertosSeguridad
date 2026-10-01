@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // Emits a self-contained server bundle so the runtime image ships without node_modules.
+  // Genera un bundle de servidor autocontenido para que la imagen final no lleve node_modules.
   output: 'standalone',
 };
 

@@ -1,5 +1,5 @@
-import type { RequestPriority, RequestStatus } from '@/lib/api/types';
-import { priorityLabels, statusLabels } from '@/lib/labels';
+import type { RequestPriority, RequestStatus, UserRole } from '@/lib/api/types';
+import { priorityLabels, roleLabels, statusLabels } from '@/lib/labels';
 
 const statusStyles: Record<RequestStatus, string> = {
   Pending: 'bg-amber-100 text-amber-800 ring-amber-200',
@@ -24,4 +24,22 @@ export function StatusBadge({ status }: { status: RequestStatus }) {
 
 export function PriorityBadge({ priority }: { priority: RequestPriority }) {
   return <span className={`${base} ${priorityStyles[priority]}`}>{priorityLabels[priority]}</span>;
+}
+
+const roleStyles: Record<UserRole, string> = {
+  Requester: 'bg-slate-100 text-slate-700 ring-slate-200',
+  Staff: 'bg-brand-50 text-brand-700 ring-brand-200',
+  Admin: 'bg-violet-50 text-violet-700 ring-violet-200',
+};
+
+export function RoleBadge({ role }: { role: UserRole }) {
+  return <span className={`${base} ${roleStyles[role]}`}>{roleLabels[role]}</span>;
+}
+
+export function ActiveBadge({ isActive }: { isActive: boolean }) {
+  return isActive ? (
+    <span className={`${base} bg-emerald-50 text-emerald-700 ring-emerald-200`}>Activa</span>
+  ) : (
+    <span className={`${base} bg-slate-100 text-slate-500 ring-slate-200`}>Desactivada</span>
+  );
 }

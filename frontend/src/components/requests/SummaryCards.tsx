@@ -1,15 +1,21 @@
 import { maintenanceRequestsApi } from '@/lib/api/client';
 import { ErrorMessage } from '@/components/ui/Feedback';
+import { redirectIfSessionEnded } from '@/lib/auth/serverSession';
 
 /**
- * Dashboard counters. Rendered on the server from the API aggregate, so the numbers always
- * reflect persisted data rather than the rows currently loaded in the table.
+ * Contadores del panel. Se muestran en el servidor a partir del agregado de la API, así que los
+ * números siempre reflejan los datos persistidos y no las filas cargadas en la tabla.
+ *
+ * Solo los ven el personal y el administrador; el alcance lo decide el backend a partir del
+ * token, y el componente no necesita saberlo.
  */
-export async function SummaryCards() {
+export async function SummaryCards({ token }: { token: string }) {
   let summary;
   try {
-    summary = await maintenanceRequestsApi.getSummary();
-  } catch {
+    summary = await maintenanceRequestsApi.getSummary(token);
+  } catch (error) {
+    redirectIfSessionEnded(error);
+
     return <ErrorMessage title="No fue posible cargar los indicadores." />;
   }
 

@@ -12,9 +12,9 @@ public sealed class RequestHistoryEntryConfiguration : IEntityTypeConfiguration<
 
         builder.HasKey(entry => entry.Id);
 
-        // The identifier is assigned by the domain, not by the database. Saying so explicitly
-        // is what makes EF track a new entry as an insert instead of an update: with the
-        // default convention a non-empty Guid key reads as "this row already exists".
+        // El identificador lo asigna el dominio, no la base de datos. Declararlo explícitamente es lo
+        // que hace que EF trate una entrada nueva como inserción y no como actualización: con la
+        // convención por defecto, una clave Guid no vacía se interpreta como «esta fila ya existe».
         builder.Property(entry => entry.Id).ValueGeneratedNever();
 
         builder.Property(entry => entry.EventType)
@@ -33,8 +33,20 @@ public sealed class RequestHistoryEntryConfiguration : IEntityTypeConfiguration<
 
         builder.Property(entry => entry.OccurredAt).IsRequired();
 
-        // The detail view always reads a single request's history in chronological order.
+        // El actor de cada evento registrado debe ser un usuario real. Restrict, no cascada: borrar un
+        // usuario nunca puede eliminar en silencio el rastro de auditoría que produjo.
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(entry => entry.ActorId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // La vista de detalle siempre lee el historial de una sola solicitud en orden cronológico.
         builder.HasIndex(entry => new { entry.RequestId, entry.OccurredAt })
             .HasDatabaseName("ix_request_history_entries_request_id_occurred_at");
+
+        // Se declara explícitamente solo para mantener la convención de nombres: la clave foránea del
+        // actor necesita un índice de apoyo y EF crearía uno con su propio nombre por defecto.
+        builder.HasIndex(entry => entry.ActorId)
+            .HasDatabaseName("ix_request_history_entries_actor_id");
     }
 }

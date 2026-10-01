@@ -15,7 +15,7 @@ public class MaintenanceRequestAssignmentTests
     private static readonly DateTimeOffset Now = new(2026, 3, 5, 10, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void AssignResponsible_OnUnassignedRequest_RecordsHistoryWithNoPreviousValue()
+    public void AssigningAPendingRequest_StartsIt_AndRecordsBothEventsInOrder()
     {
         var request = NewRequest();
         var occurredAt = Now.AddHours(1);
@@ -24,27 +24,46 @@ public class MaintenanceRequestAssignmentTests
 
         request.ResponsibleId.Should().Be(Technician.Id);
         request.ResponsibleName.Should().Be(Technician.Name);
+        request.Status.Should().Be(RequestStatus.InProgress);
         request.UpdatedAt.Should().Be(occurredAt);
 
-        request.History.Last().Should().BeEquivalentTo(new
-        {
-            EventType = HistoryEventType.ResponsibleChanged,
-            PreviousValue = (string?)null,
-            NewValue = Technician.Name,
-            ActorId = Supervisor.Id,
-            OccurredAt = occurredAt
-        });
+        // Creada, luego la asignación y luego el inicio que provocó: mismo actor, mismo instante.
+        request.History.Should().HaveCount(3);
+        request.History.Skip(1).Should().BeEquivalentTo(
+            new object[]
+            {
+                new
+                {
+                    EventType = HistoryEventType.ResponsibleChanged,
+                    PreviousValue = (string?)null,
+                    NewValue = Technician.Name,
+                    ActorId = Supervisor.Id,
+                    OccurredAt = occurredAt
+                },
+                new
+                {
+                    EventType = HistoryEventType.StatusChanged,
+                    PreviousValue = nameof(RequestStatus.Pending),
+                    NewValue = nameof(RequestStatus.InProgress),
+                    ActorId = Supervisor.Id,
+                    OccurredAt = occurredAt
+                }
+            },
+            options => options.WithStrictOrdering());
     }
 
     [Fact]
-    public void AssignResponsible_Reassigning_RecordsPreviousAndNewResponsible()
+    public void Reassigning_RecordsPreviousAndNewResponsible_WithoutAnotherStatusChange()
     {
         var request = NewRequest();
         request.AssignResponsible(Technician, Supervisor, Now.AddHours(1));
+        var historyBefore = request.History.Count;
 
         request.AssignResponsible(OtherTechnician, Supervisor, Now.AddHours(2));
 
         request.ResponsibleId.Should().Be(OtherTechnician.Id);
+        request.Status.Should().Be(RequestStatus.InProgress);
+        request.History.Should().HaveCount(historyBefore + 1);
         request.History.Last().Should().BeEquivalentTo(new
         {
             EventType = HistoryEventType.ResponsibleChanged,
@@ -55,17 +74,31 @@ public class MaintenanceRequestAssignmentTests
     }
 
     [Fact]
-    public void AssignResponsible_WithNull_ClearsTheAssignmentAndRecordsIt()
+    public void ReassigningARequestOnHold_KeepsItOnHold()
     {
         var request = NewRequest();
         request.AssignResponsible(Technician, Supervisor, Now.AddHours(1));
+        request.ChangeStatus(RequestStatus.OnHold, Technician, Now.AddHours(2));
 
-        request.AssignResponsible(null, Supervisor, Now.AddHours(2));
+        request.AssignResponsible(OtherTechnician, Supervisor, Now.AddHours(3));
 
-        request.ResponsibleId.Should().BeNull();
-        request.ResponsibleName.Should().BeNull();
-        request.History.Last().NewValue.Should().BeNull();
-        request.History.Last().PreviousValue.Should().Be(Technician.Name);
+        // Solo una solicitud pendiente se inicia al asignarla; pausar es decisión del responsable y un
+        // cambio de manos no lo deshace.
+        request.Status.Should().Be(RequestStatus.OnHold);
+    }
+
+    [Fact]
+    public void TheNewResponsible_TakesOverTheExecutionTransitions()
+    {
+        var request = NewRequest();
+        request.AssignResponsible(Technician, Supervisor, Now.AddHours(1));
+        request.AssignResponsible(OtherTechnician, Supervisor, Now.AddHours(2));
+
+        var byFormerResponsible = () => request.ChangeStatus(RequestStatus.Resolved, Technician, Now.AddHours(3));
+        byFormerResponsible.Should().Throw<ForbiddenOperationException>();
+
+        request.Resolve("Trabajo terminado", "Se completó la reparación solicitada.", OtherTechnician, Now.AddHours(3));
+        request.Status.Should().Be(RequestStatus.Resolved);
     }
 
     [Fact]
@@ -81,6 +114,18 @@ public class MaintenanceRequestAssignmentTests
         request.History.Should().HaveCount(historyBefore);
     }
 
+    [Fact]
+    public void AssignResponsible_WithoutAResponsible_IsRejected()
+    {
+        // Una solicitud iniciada no puede volver a Pending, así que nunca puede quedar sin responsable.
+        var request = NewRequest();
+
+        var act = () => request.AssignResponsible(null!, Supervisor, Now.AddHours(1));
+
+        act.Should().Throw<ArgumentNullException>();
+        request.History.Should().ContainSingle();
+    }
+
     [Theory]
     [InlineData(RequestStatus.Resolved)]
     [InlineData(RequestStatus.Cancelled)]
@@ -90,15 +135,15 @@ public class MaintenanceRequestAssignmentTests
 
         if (terminalStatus == RequestStatus.Resolved)
         {
-            request.ChangeStatus(RequestStatus.InProgress, Supervisor, Now.AddHours(1));
-            request.ChangeStatus(RequestStatus.Resolved, Supervisor, Now.AddHours(2));
+            request.AssignResponsible(Technician, Supervisor, Now.AddHours(1));
+            request.Resolve("Trabajo terminado", "Se completó la reparación solicitada.", Technician, Now.AddHours(2));
         }
         else
         {
             request.ChangeStatus(RequestStatus.Cancelled, Supervisor, Now.AddHours(1));
         }
 
-        var act = () => request.AssignResponsible(Technician, Supervisor, Now.AddHours(3));
+        var act = () => request.AssignResponsible(OtherTechnician, Supervisor, Now.AddHours(3));
 
         act.Should().Throw<DomainValidationException>();
     }

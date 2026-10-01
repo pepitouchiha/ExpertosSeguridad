@@ -7,10 +7,10 @@ using FluentValidationException = FluentValidation.ValidationException;
 namespace ExpertosSeguridad.Api.Errors;
 
 /// <summary>
-/// Single place where exceptions become HTTP responses. Controllers stay free of try/catch
-/// and the mapping rule (which failure means which status code) is stated once.
-/// Unexpected exceptions are logged in full but answered with a generic message so internal
-/// details never reach the client.
+/// Único lugar donde las excepciones se convierten en respuestas HTTP. Los controladores quedan
+/// libres de try/catch y la regla de correspondencia (qué falla significa qué código) se declara
+/// una sola vez. Las excepciones inesperadas se registran completas en el log, pero se responden
+/// con un mensaje genérico para que ningún detalle interno llegue al cliente.
 /// </summary>
 public sealed class GlobalExceptionHandler : IExceptionHandler
 {
@@ -37,6 +37,21 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
                 StatusCodes.Status409Conflict,
                 "Transición no permitida",
                 transition.Message),
+            // Se sabe quién llama, pero su rol no permite la operación: 403, no 400.
+            ForbiddenOperationException forbidden => BuildProblem(
+                StatusCodes.Status403Forbidden,
+                "Operación no permitida",
+                forbidden.Message),
+            // Credenciales incorrectas y usuario inexistente terminan aquí con el mismo mensaje.
+            InvalidCredentialsException credentials => BuildProblem(
+                StatusCodes.Status401Unauthorized,
+                "Credenciales inválidas",
+                credentials.Message),
+            UnauthorizedAccessException => BuildProblem(
+                StatusCodes.Status401Unauthorized,
+                "No autenticado",
+                "La operación requiere iniciar sesión."),
+            ConflictException conflict => BuildConflictProblem(conflict),
             NotFoundException notFound => BuildProblem(
                 StatusCodes.Status404NotFound,
                 "Recurso no encontrado",
@@ -64,8 +79,8 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
         problem.Instance = httpContext.Request.Path;
         httpContext.Response.StatusCode = problem.Status ?? StatusCodes.Status500InternalServerError;
 
-        // Serialised against the runtime type: with the declared base type the `errors`
-        // dictionary of ValidationProblemDetails would be dropped from the payload.
+        // Se serializa con el tipo en tiempo de ejecución: con el tipo base declarado se perdería
+        // del cuerpo el diccionario `errors` de ValidationProblemDetails.
         await httpContext.Response.WriteAsJsonAsync(
             problem,
             problem.GetType(),
@@ -89,6 +104,29 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
             Status = StatusCodes.Status400BadRequest,
             Title = "Solicitud inválida",
             Detail = "Uno o más campos no superaron la validación."
+        };
+    }
+
+    /// <summary>
+    /// Un 409 que, cuando el conflicto corresponde a un campo, lo lleva en <c>errors</c> igual que un
+    /// error de validación. Así el formulario puede mostrar «correo ya registrado» bajo el campo de
+    /// correo sin un caso especial.
+    /// </summary>
+    private static ProblemDetails BuildConflictProblem(ConflictException conflict)
+    {
+        if (conflict.Field is null)
+        {
+            return BuildProblem(StatusCodes.Status409Conflict, "Conflicto", conflict.Message);
+        }
+
+        return new ValidationProblemDetails(new Dictionary<string, string[]>
+        {
+            [ToCamelCase(conflict.Field)] = new[] { conflict.Message }
+        })
+        {
+            Status = StatusCodes.Status409Conflict,
+            Title = "Conflicto",
+            Detail = conflict.Message
         };
     }
 

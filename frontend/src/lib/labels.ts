@@ -1,8 +1,14 @@
-import type { HistoryEventType, RequestCategory, RequestPriority, RequestStatus } from './api/types';
+import type {
+  HistoryEventType,
+  RequestCategory,
+  RequestPriority,
+  RequestStatus,
+  UserRole,
+} from './api/types';
 
 /**
- * The API speaks the domain language (English enum names) and the UI speaks the user's
- * language. Keeping the translation in one map avoids scattering literals across components.
+ * La API habla el lenguaje del dominio (nombres de enum en inglés) y la interfaz el del usuario.
+ * Tener la traducción en un solo mapa evita repartir textos por todos los componentes.
  */
 export const statusLabels: Record<RequestStatus, string> = {
   Pending: 'Pendiente',
@@ -26,6 +32,12 @@ export const categoryLabels: Record<RequestCategory, string> = {
   Other: 'Otros',
 };
 
+export const roleLabels: Record<UserRole, string> = {
+  Requester: 'Solicitante',
+  Staff: 'Personal Expertos Seguridad',
+  Admin: 'Administrador',
+};
+
 export const historyEventLabels: Record<HistoryEventType, string> = {
   Created: 'Solicitud creada',
   StatusChanged: 'Cambio de estado',
@@ -39,7 +51,14 @@ const dateFormatter = new Intl.DateTimeFormat('es-CO', {
 
 export const formatDateTime = (isoDate: string) => dateFormatter.format(new Date(isoDate));
 
-/** Translates a history value, which carries a status name for lifecycle events. */
+/**
+ * Cómo se refieren las personas a una solicitud. El Guid sigue siendo el identificador en las
+ * URLs y en las llamadas; este es el legible que muestra el listado, ya que RF-02 pide un
+ * identificador en él.
+ */
+export const formatRequestNumber = (value: number) => `SOL-${String(value).padStart(4, '0')}`;
+
+/** Traduce un valor del historial, que en los eventos del ciclo de vida lleva un nombre de estado. */
 export const describeHistoryValue = (value: string | null): string => {
   if (!value) return '—';
   return statusLabels[value as RequestStatus] ?? value;

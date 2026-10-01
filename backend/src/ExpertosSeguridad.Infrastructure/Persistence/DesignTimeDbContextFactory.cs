@@ -4,9 +4,9 @@ using Microsoft.EntityFrameworkCore.Design;
 namespace ExpertosSeguridad.Infrastructure.Persistence;
 
 /// <summary>
-/// Used only by <c>dotnet ef</c> to build the model when generating migrations. It keeps the
-/// tooling independent from the API host, so creating a migration never needs a running
-/// database or the application configuration.
+/// Solo lo usa <c>dotnet ef</c> para construir el modelo al generar migraciones. Mantiene las
+/// herramientas independientes del host de la API, así que crear una migración nunca necesita
+/// una base de datos en marcha ni la configuración de la aplicación.
 /// </summary>
 public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<MaintenanceDbContext>
 {

@@ -4,8 +4,8 @@ using ExpertosSeguridad.Domain.ValueObjects;
 namespace ExpertosSeguridad.Domain.Entities;
 
 /// <summary>
-/// Immutable audit record. Instances are only produced by <see cref="MaintenanceRequest"/>,
-/// so no change can reach the database without its matching history entry.
+/// Registro de auditoría inmutable. Solo <see cref="MaintenanceRequest"/> crea instancias, así
+/// que ningún cambio puede llegar a la base de datos sin su entrada de historial.
 /// </summary>
 public sealed class RequestHistoryEntry
 {

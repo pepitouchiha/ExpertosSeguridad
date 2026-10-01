@@ -3,9 +3,10 @@ using ExpertosSeguridad.Domain.Exceptions;
 namespace ExpertosSeguridad.Domain.ValueObjects;
 
 /// <summary>
-/// Identifies a person taking part in a request: requester, responsible or the actor
-/// performing an operation. Modelled as an owned value object because the test brief
-/// scopes users to a fixed catalogue rather than a managed identity system.
+/// Identifica a una persona que participa en una solicitud: el solicitante, el responsable o
+/// quien ejecuta una operación. Es un objeto de valor con una copia del nombre, no una referencia
+/// al usuario: el historial debe seguir mostrando el nombre que tenía la persona cuando ocurrió
+/// el evento, aunque después cambie.
 /// </summary>
 public sealed record Actor
 {

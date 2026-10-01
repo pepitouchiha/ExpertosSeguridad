@@ -1,4 +1,5 @@
 using ExpertosSeguridad.Domain.Entities;
+using ExpertosSeguridad.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -12,20 +13,61 @@ public sealed class MaintenanceRequestConfiguration : IEntityTypeConfiguration<M
 
         builder.HasKey(request => request.Id);
 
-        // The aggregate assigns its own identifier in the factory, so the key is never
-        // store-generated. See the note in RequestHistoryEntryConfiguration.
+        // El agregado asigna su propio identificador en la fábrica, así que la clave nunca la genera
+        // la base de datos. Ver la nota en RequestHistoryEntryConfiguration.
         builder.Property(request => request.Id).ValueGeneratedNever();
+
+        // El número legible es el único valor que asigna la base de datos y no el dominio: una columna
+        // de identidad es la única forma de repartir números secuenciales sin duplicados cuando dos
+        // inserciones simultáneas leerían por su cuenta «el último número».
+        builder.Property(request => request.Number)
+            .UseIdentityByDefaultColumn()
+            .ValueGeneratedOnAdd();
+
+        builder.HasIndex(request => request.Number)
+            .IsUnique()
+            .HasDatabaseName("ix_maintenance_requests_number");
 
         builder.Property(request => request.Title)
             .HasMaxLength(MaintenanceRequest.TitleMaxLength)
             .IsRequired();
 
+        // La respuesta vive en la fila de la propia solicitud: no tiene identidad ni vida fuera de la
+        // solicitud que resuelve. Las columnas son anulables porque solo existe una vez resuelta.
+        builder.OwnsOne(request => request.Resolution, resolution =>
+        {
+            resolution.Property(value => value.Title)
+                .HasColumnName("ResolutionTitle")
+                .HasMaxLength(Resolution.TitleMaxLength);
+
+            resolution.Property(value => value.Description)
+                .HasColumnName("ResolutionDescription")
+                .HasMaxLength(Resolution.DescriptionMaxLength);
+
+            resolution.Property(value => value.RespondedById).HasColumnName("ResolvedById");
+
+            resolution.Property(value => value.RespondedByName)
+                .HasColumnName("ResolvedByName")
+                .HasMaxLength(120);
+
+            resolution.Property(value => value.RespondedAt).HasColumnName("ResolvedAt");
+
+            // Quien respondió debe ser un usuario real, y borrarlo no debe borrar la respuesta.
+            resolution.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(value => value.RespondedById)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            resolution.HasIndex(value => value.RespondedById)
+                .HasDatabaseName("ix_maintenance_requests_resolved_by_id");
+        });
+
         builder.Property(request => request.Description)
             .HasMaxLength(MaintenanceRequest.DescriptionMaxLength)
             .IsRequired();
 
-        // Enums are persisted as text: the data stays readable in SQL and adding a member
-        // later cannot silently re-map existing rows the way ordinal storage would.
+        // Los enums se guardan como texto: los datos se leen bien en SQL y agregar un miembro después
+        // no puede reasignar en silencio las filas existentes, como pasaría guardando el ordinal.
         builder.Property(request => request.Category)
             .HasConversion<string>()
             .HasMaxLength(32)
@@ -52,8 +94,25 @@ public sealed class MaintenanceRequestConfiguration : IEntityTypeConfiguration<M
         builder.Property(request => request.CreatedAt).IsRequired();
         builder.Property(request => request.UpdatedAt).IsRequired();
 
-        // History is only reachable through the aggregate root, so the collection is mapped
-        // to the backing field and the entries cascade with their request.
+        // Claves foráneas declaradas sin propiedades de navegación a propósito: la solicitud es su
+        // propia raíz de agregado y no debe tener referencias al agregado de usuario. La base de datos
+        // igual garantiza que una solicitud apunte a usuarios existentes, y Restrict convierte borrar un
+        // usuario con historial en un acto deliberado en lugar de una cascada silenciosa.
+        //
+        // RequesterName y ResponsibleName se mantienen desnormalizados: son la copia del nombre en el
+        // momento del evento, así que renombrar a un usuario nunca reescribe el historial registrado.
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(request => request.RequesterId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(request => request.ResponsibleId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Al historial solo se llega por la raíz del agregado, así que la colección se mapea al campo
+        // privado y las entradas se borran en cascada con su solicitud.
         builder.HasMany(request => request.History)
             .WithOne()
             .HasForeignKey(entry => entry.RequestId)
@@ -63,8 +122,8 @@ public sealed class MaintenanceRequestConfiguration : IEntityTypeConfiguration<M
             .HasField("_history")
             .UsePropertyAccessMode(PropertyAccessMode.Field);
 
-        // Sorting by creation date is the list default, and every filter narrows that same
-        // query, so the sort column leads the composite indexes.
+        // Ordenar por fecha de creación es el valor por defecto del listado, y cada filtro acota esa
+        // misma consulta, así que la columna de orden encabeza los índices compuestos.
         builder.HasIndex(request => request.CreatedAt)
             .HasDatabaseName("ix_maintenance_requests_created_at");
 
@@ -79,5 +138,10 @@ public sealed class MaintenanceRequestConfiguration : IEntityTypeConfiguration<M
 
         builder.HasIndex(request => request.ResponsibleId)
             .HasDatabaseName("ix_maintenance_requests_responsible_id");
+
+        // El listado de un solicitante siempre filtra por dueño y ordena por fecha, así que el par se
+        // indexa junto en lugar de depender solo de la columna del solicitante.
+        builder.HasIndex(request => new { request.RequesterId, request.CreatedAt })
+            .HasDatabaseName("ix_maintenance_requests_requester_id_created_at");
     }
 }

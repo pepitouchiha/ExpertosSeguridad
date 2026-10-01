@@ -40,6 +40,12 @@ namespace ExpertosSeguridad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<int>("Number")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Number"));
+
                     b.Property<string>("Priority")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -78,6 +84,10 @@ namespace ExpertosSeguridad.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("ix_maintenance_requests_created_at");
 
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_maintenance_requests_number");
+
                     b.HasIndex("ResponsibleId")
                         .HasDatabaseName("ix_maintenance_requests_responsible_id");
 
@@ -86,6 +96,9 @@ namespace ExpertosSeguridad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Priority", "CreatedAt")
                         .HasDatabaseName("ix_maintenance_requests_priority_created_at");
+
+                    b.HasIndex("RequesterId", "CreatedAt")
+                        .HasDatabaseName("ix_maintenance_requests_requester_id_created_at");
 
                     b.HasIndex("Status", "CreatedAt")
                         .HasDatabaseName("ix_maintenance_requests_status_created_at");
@@ -127,14 +140,130 @@ namespace ExpertosSeguridad.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ActorId")
+                        .HasDatabaseName("ix_request_history_entries_actor_id");
+
                     b.HasIndex("RequestId", "OccurredAt")
                         .HasDatabaseName("ix_request_history_entries_request_id_occurred_at");
 
                     b.ToTable("request_history_entries", (string)null);
                 });
 
+            modelBuilder.Entity("ExpertosSeguridad.Domain.Entities.User", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique()
+                        .HasDatabaseName("ix_users_email");
+
+                    b.HasIndex("Role")
+                        .HasDatabaseName("ix_users_role");
+
+                    b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("ExpertosSeguridad.Domain.Entities.MaintenanceRequest", b =>
+                {
+                    b.HasOne("ExpertosSeguridad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RequesterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ExpertosSeguridad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ResponsibleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.OwnsOne("ExpertosSeguridad.Domain.ValueObjects.Resolution", "Resolution", b1 =>
+                        {
+                            b1.Property<Guid>("MaintenanceRequestId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Description")
+                                .IsRequired()
+                                .HasMaxLength(2000)
+                                .HasColumnType("character varying(2000)")
+                                .HasColumnName("ResolutionDescription");
+
+                            b1.Property<DateTimeOffset>("RespondedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("ResolvedAt");
+
+                            b1.Property<Guid>("RespondedById")
+                                .HasColumnType("uuid")
+                                .HasColumnName("ResolvedById");
+
+                            b1.Property<string>("RespondedByName")
+                                .IsRequired()
+                                .HasMaxLength(120)
+                                .HasColumnType("character varying(120)")
+                                .HasColumnName("ResolvedByName");
+
+                            b1.Property<string>("Title")
+                                .IsRequired()
+                                .HasMaxLength(120)
+                                .HasColumnType("character varying(120)")
+                                .HasColumnName("ResolutionTitle");
+
+                            b1.HasKey("MaintenanceRequestId");
+
+                            b1.HasIndex("RespondedById")
+                                .HasDatabaseName("ix_maintenance_requests_resolved_by_id");
+
+                            b1.ToTable("maintenance_requests");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MaintenanceRequestId");
+
+                            b1.HasOne("ExpertosSeguridad.Domain.Entities.User", null)
+                                .WithMany()
+                                .HasForeignKey("RespondedById")
+                                .OnDelete(DeleteBehavior.Restrict)
+                                .IsRequired();
+                        });
+
+                    b.Navigation("Resolution");
+                });
+
             modelBuilder.Entity("ExpertosSeguridad.Domain.Entities.RequestHistoryEntry", b =>
                 {
+                    b.HasOne("ExpertosSeguridad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("ExpertosSeguridad.Domain.Entities.MaintenanceRequest", null)
                         .WithMany("History")
                         .HasForeignKey("RequestId")

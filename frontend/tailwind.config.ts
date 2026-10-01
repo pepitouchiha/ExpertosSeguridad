@@ -5,14 +5,18 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Tomado del logo corporativo, para que la interfaz y la marca coincidan en lugar de usar un
+        // azul genérico al lado.
         brand: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
+          50: '#eef4fb',
+          100: '#d6e5f5',
+          200: '#aecbea',
+          300: '#7fabdb',
+          500: '#2f74bc',
+          600: '#1b5faa',
+          700: '#154b88',
+          800: '#103a6a',
+          900: '#0c2b4f',
         },
       },
     },

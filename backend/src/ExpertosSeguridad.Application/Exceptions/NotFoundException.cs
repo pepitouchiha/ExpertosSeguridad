@@ -1,7 +1,7 @@
 namespace ExpertosSeguridad.Application.Exceptions;
 
 /// <summary>
-/// Raised when a use case targets an entity that does not exist. Maps to HTTP 404.
+/// Se lanza cuando un caso de uso apunta a una entidad que no existe. Corresponde a HTTP 404.
 /// </summary>
 public sealed class NotFoundException : Exception
 {

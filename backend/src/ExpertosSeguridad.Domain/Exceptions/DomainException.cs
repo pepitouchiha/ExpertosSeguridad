@@ -1,8 +1,8 @@
 namespace ExpertosSeguridad.Domain.Exceptions;
 
 /// <summary>
-/// Base type for every rule violation raised by the domain model. The API layer maps
-/// these to HTTP responses, so infrastructure concerns never leak into the domain.
+/// Tipo base de toda violación de reglas que lanza el modelo de dominio. La capa de API las
+/// traduce a respuestas HTTP, así que las preocupaciones de infraestructura nunca entran al dominio.
 /// </summary>
 public abstract class DomainException : Exception
 {
